@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Craft rules based on data in your Firestore database
+// allow write: if firestore.get(
+//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Profile Images:
+    // Anyone can view/download.
+    // Only authenticated users can upload.
+    // Only the user who uploaded the image can update or delete it.
+    match /profile_images/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow authenticated users to upload profile images with any filename in profile_images folder
+    match /profile_images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Donor Attachments:
+    // Anyone can read (for admin verification).
+    // Only authenticated users can upload their own attachments.
+    match /donor_attachments/{userId}_{timestamp}.jpg {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow authenticated users to upload donor attachments with any filename in donor_attachments folder
+    match /donor_attachments/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Default rule - deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
