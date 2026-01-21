@@ -78,15 +78,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Listen for unread chat notification count
     _notificationService.getUnreadChatNotificationCount().listen((count) {
-      print('💬 Received chat notification count: $count');
+      print(' Received chat notification count: $count');
       if (mounted) {
         setState(() {
           _unreadChatCount = count;
         });
-        print('💬 Updated chat notification badge: $count');
+        print(' Updated chat notification badge: $count');
       }
     }).onError((error) {
-      print('❌ Error in chat notification count listener: $error');
+      print(' Error in chat notification count listener: $error');
       if (mounted) {
         setState(() {
           _unreadChatCount = 0;
@@ -94,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
     
-    print('✅ Notification badge listeners set up successfully');
+    print(' Notification badge listeners set up successfully');
   }
 
 
