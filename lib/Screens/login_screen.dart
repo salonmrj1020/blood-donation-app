@@ -116,13 +116,57 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (_) => const EmailVerificationScreen()),
         );
       }
+    } else if (error == 'Google sign-in was cancelled') {
+      // User cancelled - don't show error message
+      return;
     } else {
-      // Show error message
+      // Show error message with better styling and specific handling
+      Color backgroundColor = Colors.red;
+      IconData icon = Icons.error_outline;
+      
+      // Use different colors for different error types
+      if (error.contains('Configuration Error') || error.contains('SHA-1')) {
+        backgroundColor = Colors.orange;
+        icon = Icons.settings;
+      } else if (error.contains('Network error')) {
+        backgroundColor = Colors.blue;
+        icon = Icons.wifi_off;
+      } else if (error.contains('not available')) {
+        backgroundColor = Colors.grey;
+        icon = Icons.info_outline;
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error),
-            backgroundColor: Colors.red,
+            content: Row(
+              children: [
+                Icon(icon, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: backgroundColor,
+            duration: const Duration(seconds: 6),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            action: error.contains('Configuration Error') 
+                ? SnackBarAction(
+                    label: 'Help',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      // Show help dialog
+                      _showGoogleSignInHelpDialog();
+                    },
+                  )
+                : null,
           ),
         );
       }
@@ -289,6 +333,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
+                    const SizedBox(height: 8),
+                    
+                    // Helper text for Google Sign-In
+                    Text(
+                      "Google Sign-In requires configuration update",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
                     const SizedBox(height: 10),
 
                     // Sign up link
@@ -311,6 +368,62 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showGoogleSignInHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Google Sign-In Help'),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Google Sign-In Configuration Issue',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'The Google Sign-In feature requires a configuration update in Firebase Console. This is a technical issue that needs to be resolved by the developer.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'What you can do:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 4),
+              Text('• Use email/password login instead'),
+              Text('• Contact the developer to fix the configuration'),
+              Text('• Try again later after the fix is applied'),
+              SizedBox(height: 12),
+              Text(
+                'Technical Details:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'SHA-1 fingerprint mismatch between current keystore and Firebase Console configuration.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
       ),
     );
   }
