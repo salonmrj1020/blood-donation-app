@@ -13,7 +13,6 @@ class VerificationService {
     return _firestore
         .collection('pendingVerifications')
         .where('status', isEqualTo: 'pending')
-        .orderBy('submittedAt', descending: true)
         .snapshots();
   }
 
@@ -228,7 +227,6 @@ class VerificationService {
   Stream<QuerySnapshot> getAdminActionsLog({int limit = 50}) {
     return _firestore
         .collection('adminActions')
-        .orderBy('timestamp', descending: true)
         .limit(limit)
         .snapshots();
   }
