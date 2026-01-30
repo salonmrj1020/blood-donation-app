@@ -129,13 +129,31 @@ class _SignupScreenState extends State<SignupScreen> {
         context,
         MaterialPageRoute(builder: (_) => const EmailVerificationScreen()),
       );
+    } else if (error == 'Google sign-in was cancelled') {
+      // User cancelled - don't show error message
+      return;
     } else {
-      // Show error
+      // Show error with better styling
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error),
-          backgroundColor: Colors.red,
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  error,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange,
           duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
     }
@@ -311,6 +329,19 @@ class _SignupScreenState extends State<SignupScreen> {
                     side: const BorderSide(color: Colors.grey),
                   ),
                 ),
+              ),
+
+              const SizedBox(height: 8),
+              
+              // Helper text for Google Sign-In
+              Text(
+                "Note: Google Sign-In may not work on emulators",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
               ),
 
               const SizedBox(height: 10),
