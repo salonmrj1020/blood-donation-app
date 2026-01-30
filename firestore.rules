@@ -21,6 +21,24 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     
+    // Pending verification applications - users can create their own, admins can read/write all
+    match /pendingVerifications/{userId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == userId || 
+         exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow delete: if request.auth != null && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
+    // Admin actions log - only admins can read/write
+    match /adminActions/{actionId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
     // Donors collection - users can read all donors but only write their own
     // Admins can write any donor document for verification
     match /donors/{donorId} {
