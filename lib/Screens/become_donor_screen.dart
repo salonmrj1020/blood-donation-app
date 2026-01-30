@@ -411,179 +411,34 @@ class _BecomeDonorScreenState extends State<BecomeDonorScreen> {
       return;
     }
 
-    // Make attachment optional with a warning if not provided
-    if (_attachmentImage == null) {
-      final shouldContinue = await _showAttachmentWarningDialog();
-      if (!shouldContinue) {
-        return;
-      }
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      // Create donor profile using direct Firestore write (bypass model for testing)
-      print('=== DONOR SUBMISSION DEBUG ===');
-      print('Creating donor profile with:');
-      print('  - bloodType: $_selectedBloodGroup');
-      print('  - user: ${_authService.currentUser?.uid}');
-      
       final user = _authService.currentUser;
       if (user == null) {
         throw Exception('User not authenticated');
       }
 
-      // Get user data
-      final userData = await _authService.getCurrentUserData();
-      if (userData == null) {
-        throw Exception('User data not found');
-      }
+      // Update user profile with basic donor information
+      await _authService.updateUserProfile(
+        bloodType: _selectedBloodGroup,
+        dateOfBirth: _selectedDOB,
+        gender: _selectedGender,
+        weight: double.tryParse(_weightController.text) ?? 0.0,
+        occupation: _occupationController.text.trim(),
+      );
 
-      final name = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
-
-      // Upload attachment image to Firebase Storage
-      String? attachmentUrl;
-      if (_attachmentImage != null) {
-        try {
-          print('Starting attachment upload...');
-          
-          // Create storage reference
-          final storageRef = FirebaseStorage.instance
-              .ref()
-              .child('donor_attachments')
-              .child('${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-          
-          print('Storage reference created: ${storageRef.fullPath}');
-          
-          // Upload file with metadata
-          final metadata = SettableMetadata(
-            contentType: 'image/jpeg',
-            customMetadata: {
-              'uploadedBy': user.uid,
-              'uploadedAt': DateTime.now().toIso8601String(),
-              'purpose': 'donor_verification',
-            },
-          );
-          
-          final uploadTask = storageRef.putFile(_attachmentImage!, metadata);
-          
-          // Monitor upload progress
-          uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-            final progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            print('Upload progress: ${progress.toStringAsFixed(2)}%');
-          });
-          
-          // Wait for upload to complete
-          final taskSnapshot = await uploadTask;
-          attachmentUrl = await taskSnapshot.ref.getDownloadURL();
-          
-          print('✅ Attachment uploaded successfully!');
-          print('   → URL: $attachmentUrl');
-          print('   → Size: ${taskSnapshot.totalBytes} bytes');
-          
-        } catch (e) {
-          print('❌ Error uploading attachment: $e');
-          
-          // Check if it's a storage setup issue
-          if (e.toString().contains('object-not-found') || 
-              e.toString().contains('storage') ||
-              e.toString().contains('bucket')) {
-            
-            // Show user-friendly message about storage setup
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('⚠️ Document upload temporarily unavailable. Your application will be submitted without the attachment.'),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 4),
-                ),
-              );
-            }
-            
-            // Continue without attachment - set a placeholder
-            attachmentUrl = null;
-            print('Continuing without attachment due to storage setup issue');
-            
-          } else {
-            // For other errors, still try to continue but log the error
-            print('Unexpected upload error: $e');
-            attachmentUrl = null;
-            
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('⚠️ Document upload failed. Your application will be submitted without the attachment.'),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 4),
-                ),
-              );
-            }
-          }
-        }
-      }
-
-      // Write directly to Firestore (this will overwrite existing document for re-applications)
-      await FirebaseFirestore.instance
-          .collection('donors')
-          .doc(user.uid)
-          .set({
-        'name': name,
-        'email': user.email ?? '',
-        'phone': userData['phone'] ?? '',
-        'bloodType': _selectedBloodGroup!,
-        'weight': double.tryParse(_weightController.text) ?? 0.0,
-        'dateOfBirth': _selectedDOB != null ? Timestamp.fromDate(_selectedDOB!) : null,
-        'gender': _selectedGender ?? '',
-        'occupation': _occupationController.text.trim(),
-        'attachmentUrl': attachmentUrl, // Store the attachment URL
-        'lastDonationDate': null,
-        'totalDonations': 0,
-        'isAvailable': false, // Set to false until verified
-        'latitude': _currentPosition?.latitude ?? 0.0,
-        'longitude': _currentPosition?.longitude ?? 0.0,
-        'address': _currentPosition != null 
-            ? 'Lat: ${_currentPosition!.latitude.toStringAsFixed(4)}, Lng: ${_currentPosition!.longitude.toStringAsFixed(4)}'
-            : 'Location not available',
-        'createdAt': Timestamp.now(),
-        'updatedAt': null,
-        'verificationStatus': 'pending', // This is the key field
-        'verifiedAt': null,
-        'verifiedBy': null,
-        'rejectedAt': null,
-        'rejectedBy': null,
-        'rejectionReason': null,
-        'adminNotes': null,
-      });
-
-      print('Donor profile written directly to Firestore');
-      
-      // Verify it was created
-      final donorDoc = await FirebaseFirestore.instance
-          .collection('donors')
-          .doc(user.uid)
-          .get();
-      
-      if (donorDoc.exists) {
-        final data = donorDoc.data()!;
-        print('Verification - Donor document exists:');
-        print('  - verificationStatus: ${data['verificationStatus']}');
-        print('  - bloodType: ${data['bloodType']}');
-        print('  - createdAt: ${data['createdAt']}');
-      } else {
-        print('ERROR: Donor document was not created!');
-        throw Exception('Failed to create donor document');
-      }
-        
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🎉 Donor application submitted successfully! Your application is now pending admin verification for security purposes.'),
+            content: Text('Basic information saved! Please complete the verification application.'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 5),
+            duration: Duration(seconds: 3),
           ),
         );
 
-        Navigator.pop(context);
+        // Navigate to verification application screen
+        Navigator.pushReplacementNamed(context, '/verification-application');
       }
     } catch (e) {
       if (mounted) {
