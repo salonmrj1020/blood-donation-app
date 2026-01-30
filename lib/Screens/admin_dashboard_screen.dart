@@ -18,10 +18,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   
   late TabController _tabController;
   Map<String, dynamic> _dashboardStats = {};
-  List<Map<String, dynamic>> _pendingApplications = [];
-  List<Map<String, dynamic>> _verifiedDonors = [];
-  List<Map<String, dynamic>> _rejectedApplications = [];
-  List<Map<String, dynamic>> _verificationLogs = [];
+  Map<String, dynamic> _verificationStats = {};
   
   bool _isLoading = true;
   bool _isAdmin = false;
@@ -43,7 +40,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     final isAdmin = await _adminService.isCurrentUserAdmin();
     
     if (!isAdmin) {
-      // If not admin, show error and go back
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Access denied: Admin privileges required'),
@@ -68,17 +64,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
     try {
       final stats = await _adminService.getAdminDashboardStats();
-      final pending = await _adminService.getPendingDonorApplications();
-      final verified = await _adminService.getVerifiedDonors();
-      final rejected = await _adminService.getRejectedDonorApplications();
-      final logs = await _adminService.getVerificationLogs();
+      
+      // Map AdminService stats to VerificationService format
+      final verificationStats = {
+        'pending': stats['pendingApplications'] ?? 0,
+        'approved': stats['verifiedDonors'] ?? 0,
+        'rejected': stats['rejectedApplications'] ?? 0,
+      };
 
       setState(() {
         _dashboardStats = stats;
-        _pendingApplications = pending;
-        _verifiedDonors = verified;
-        _rejectedApplications = rejected;
-        _verificationLogs = logs;
+        _verificationStats = verificationStats;
         _isLoading = false;
       });
     } catch (e) {
@@ -104,7 +100,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      drawer: _buildAdminDrawer(),
       appBar: AppBar(
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
@@ -118,9 +113,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
@@ -166,7 +159,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Dashboard Overview',
+            'Admin Dashboard',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -174,41 +167,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
             ),
           ),
           const SizedBox(height: 20),
+          
+          // Verification Statistics
+          _buildVerificationStatsSection(),
+          const SizedBox(height: 24),
+          
+          // Stats grid
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: 2,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            childAspectRatio: 1.3, // Increased from 1.2 to 1.3 to fix overflow
+            childAspectRatio: 1.3,
             children: [
               _buildStatCard(
-                'Pending Applications',
-                _dashboardStats['pendingApplications']?.toString() ?? '0',
+                'Pending Verifications',
+                _verificationStats['pending']?.toString() ?? '0',
                 Icons.pending_actions,
                 Colors.orange,
-                onTap: () => _tabController.animateTo(1), // Navigate to pending tab
+                onTap: () => _tabController.animateTo(1),
               ),
               _buildStatCard(
                 'Verified Donors',
-                _dashboardStats['verifiedDonors']?.toString() ?? '0',
+                _verificationStats['approved']?.toString() ?? '0',
                 Icons.verified_user,
                 Colors.green,
-                onTap: () => _tabController.animateTo(2), // Navigate to verified tab
+                onTap: () => _tabController.animateTo(2),
               ),
               _buildStatCard(
-                'Total Donors',
-                _dashboardStats['totalDonors']?.toString() ?? '0',
-                Icons.people,
-                Colors.blue,
-                onTap: () => _tabController.animateTo(2), // Navigate to verified tab
+                'Rejected Applications',
+                _verificationStats['rejected']?.toString() ?? '0',
+                Icons.cancel,
+                Colors.red,
+                onTap: () => _showRejectedApplications(),
               ),
               _buildStatCard(
                 'Blood Requests',
                 _dashboardStats['totalBloodRequests']?.toString() ?? '0',
                 Icons.bloodtype,
-                Colors.red,
-                onTap: () => _showBloodRequests(), // Navigate to blood requests
+                Colors.purple,
+                onTap: () => _showBloodRequests(),
               ),
             ],
           ),
@@ -219,11 +218,85 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
+  Widget _buildVerificationStatsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.red.shade400, Colors.red.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.3),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Verification Overview',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildMiniStat('Pending', _verificationStats['pending'] ?? 0, Icons.hourglass_empty),
+              _buildMiniStat('Approved', _verificationStats['approved'] ?? 0, Icons.check_circle),
+              _buildMiniStat('Rejected', _verificationStats['rejected'] ?? 0, Icons.cancel),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, int value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value.toString(),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.white70,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14), // Reduced from 16 to 14
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -239,7 +312,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10), // Reduced from 12 to 10
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -247,28 +320,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
               child: Icon(
                 icon,
                 color: color,
-                size: 22, // Reduced from 24 to 22
+                size: 22,
               ),
             ),
-            const SizedBox(height: 10), // Reduced from 12 to 10
+            const SizedBox(height: 10),
             Text(
               value,
               style: TextStyle(
-                fontSize: 22, // Reduced from 24 to 22
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
             ),
-            const SizedBox(height: 2), // Reduced from 4 to 2
+            const SizedBox(height: 2),
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 11, // Reduced from 12 to 11
+                fontSize: 11,
                 color: Colors.grey,
                 fontWeight: FontWeight.w500,
               ),
-              maxLines: 2, // Allow text to wrap to prevent overflow
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -307,9 +380,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    _tabController.animateTo(1); // Go to pending tab
-                  },
+                  onPressed: () => _tabController.animateTo(1),
                   icon: const Icon(Icons.pending_actions),
                   label: const Text('Review Pending'),
                   style: ElevatedButton.styleFrom(
@@ -322,13 +393,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    _tabController.animateTo(2); // Go to verified tab
-                  },
-                  icon: const Icon(Icons.verified_user),
-                  label: const Text('View Verified'),
+                  onPressed: () => _tabController.animateTo(3),
+                  icon: const Icon(Icons.history),
+                  label: const Text('View Logs'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -337,20 +406,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
             ],
           ),
           const SizedBox(height: 12),
-          // Manual refresh button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () async {
-                print('Manual refresh triggered');
-                await _loadDashboardData();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Dashboard data refreshed'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              },
+              onPressed: _loadDashboardData,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh Dashboard'),
               style: ElevatedButton.styleFrom(
@@ -366,127 +425,109 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   }
 
   Widget _buildPendingTab() {
-    if (_pendingApplications.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.inbox,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'No pending applications',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _adminService.getPendingDonorApplications(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _pendingApplications.length,
-      itemBuilder: (context, index) {
-        final application = _pendingApplications[index];
-        return _buildApplicationCard(application, 'pending');
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _loadDashboardData,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final applications = snapshot.data ?? [];
+
+        if (applications.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text(
+                  'No pending verification applications',
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Sort applications by creation date (newest first)
+        applications.sort((a, b) {
+          final aTime = a['applicationDate'] as Timestamp?;
+          final bTime = b['applicationDate'] as Timestamp?;
+          
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          
+          return bTime.compareTo(aTime);
+        });
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: applications.length,
+          itemBuilder: (context, index) {
+            final application = applications[index];
+            return _buildDonorApplicationCard(application);
+          },
+        );
       },
     );
   }
 
-  Widget _buildVerifiedTab() {
-    if (_verifiedDonors.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.verified_user,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'No verified donors yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _verifiedDonors.length,
-      itemBuilder: (context, index) {
-        final donor = _verifiedDonors[index];
-        return _buildApplicationCard(donor, 'verified');
-      },
-    );
-  }
-
-  Widget _buildLogsTab() {
-    if (_verificationLogs.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.history,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'No verification logs',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _verificationLogs.length,
-      itemBuilder: (context, index) {
-        final log = _verificationLogs[index];
-        return _buildLogCard(log);
-      },
-    );
-  }
-
-  Widget _buildApplicationCard(Map<String, dynamic> application, String status) {
+  Widget _buildDonorApplicationCard(Map<String, dynamic> application) {
     final donorData = application['donorData'] as Map<String, dynamic>;
     final userData = application['userData'] as Map<String, dynamic>;
+    final donorId = application['donorId'] as String;
     
     final name = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
     final email = userData['email'] ?? '';
     final phone = userData['phone'] ?? '';
-    final bloodType = donorData['bloodType'] ?? '';
-    final address = donorData['address'] ?? '';
-    final weight = donorData['weight']?.toString() ?? 'N/A';
-    final gender = donorData['gender'] ?? 'N/A';
-    final occupation = donorData['occupation'] ?? 'N/A';
-    final attachmentUrl = donorData['attachmentUrl'];
+    final bloodType = donorData['bloodType'] ?? 'Unknown';
+    final age = donorData['age'] ?? 0;
+    final weight = donorData['weight'] ?? 0;
     
-    // Format date of birth
-    String dateOfBirth = 'N/A';
-    if (donorData['dateOfBirth'] != null) {
-      final dob = (donorData['dateOfBirth'] as Timestamp).toDate();
-      dateOfBirth = '${dob.day}/${dob.month}/${dob.year}';
+    final applicationDate = application['applicationDate'] as Timestamp?;
+    String timeAgo = 'Unknown';
+    if (applicationDate != null) {
+      final date = applicationDate.toDate();
+      final now = DateTime.now();
+      final difference = now.difference(date);
+      
+      if (difference.inDays > 0) {
+        timeAgo = '${difference.inDays} days ago';
+      } else if (difference.inHours > 0) {
+        timeAgo = '${difference.inHours} hours ago';
+      } else if (difference.inMinutes > 0) {
+        timeAgo = '${difference.inMinutes} minutes ago';
+      } else {
+        timeAgo = 'Just now';
+      }
     }
+
+    // Check basic eligibility
+    bool isEligible = true;
+    if (age < 18 || age > 65) isEligible = false;
+    if (weight < 45) isEligible = false;
+    if (donorData['hasChronicIllness'] == true) isEligible = false;
+    if (donorData['isPregnant'] == true) isEligible = false;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -504,11 +545,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with blood type and status
+          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
+              color: Colors.orange.shade50,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -516,19 +557,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                CircleAvatar(
+                  backgroundColor: Colors.orange,
                   child: Text(
-                    bloodType,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -539,13 +572,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                       Text(
                         name,
                         style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        email,
+                        'Blood Type: $bloodType',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
@@ -554,189 +586,130 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                     ],
                   ),
                 ),
-                if (status == 'pending')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'PENDING',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  )
-                else if (status == 'verified')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'VERIFIED',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'PENDING',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                ),
               ],
             ),
           ),
           
-          // Detailed Information
+          // Details
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Personal Details Section
-                const Text(
-                  'Personal Details',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                
-                // Contact Information
                 Row(
                   children: [
+                    Expanded(
+                      child: _buildDetailItem(Icons.email, 'Email', email),
+                    ),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: _buildDetailItem(Icons.phone, 'Phone', phone),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildDetailItem(Icons.cake, 'DOB', dateOfBirth),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: _buildDetailItem(Icons.person, 'Gender', gender),
+                      child: _buildDetailItem(Icons.cake, 'Age', '$age years'),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: _buildDetailItem(Icons.monitor_weight, 'Weight', '${weight} kg'),
+                      child: _buildDetailItem(Icons.monitor_weight, 'Weight', '$weight kg'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+                _buildDetailItem(Icons.access_time, 'Submitted', timeAgo),
                 
-                _buildDetailItem(Icons.work, 'Occupation', occupation),
-                const SizedBox(height: 8),
-                _buildDetailItem(Icons.location_on, 'Address', address),
-                
-                // Attachment Photo Section
-                if (attachmentUrl != null) ...[
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Verification Document',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                // Eligibility indicator
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isEligible ? Colors.green.shade50 : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isEligible ? Colors.green : Colors.red,
+                      width: 1,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () => _showAttachmentDialog(attachmentUrl),
-                    child: Container(
-                      height: 120,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[300]!),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isEligible ? Icons.check_circle : Icons.warning,
+                        color: isEligible ? Colors.green : Colors.red,
+                        size: 16,
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          attachmentUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(child: CircularProgressIndicator());
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: Colors.grey[100],
-                              child: const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.error, color: Colors.grey),
-                                    SizedBox(height: 4),
-                                    Text('Failed to load image', style: TextStyle(color: Colors.grey)),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+                      const SizedBox(width: 8),
+                      Text(
+                        isEligible ? 'Meets basic eligibility criteria' : 'Does not meet basic criteria',
+                        style: TextStyle(
+                          color: isEligible ? Colors.green : Colors.red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap to view full size',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
           ),
           
-          // Action Buttons for Pending Applications
-          if (status == 'pending') ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showVerificationDialog(application['donorId'], true),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Verify'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showVerificationDialog(application['donorId'], false),
-                      icon: const Icon(Icons.close),
-                      label: const Text('Reject'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+          // Action buttons
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
               ),
             ),
-          ],
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _approveDonorApplication(donorId, name),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Approve'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _rejectDonorApplication(donorId, name),
+                    icon: const Icon(Icons.close),
+                    label: const Text('Reject'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -769,90 +742,288 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
-  void _showAttachmentDialog(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Stack(
-            children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.contain,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          width: 200,
-                          height: 200,
-                          color: Colors.white,
-                          child: const Center(child: CircularProgressIndicator()),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 200,
-                          height: 200,
-                          color: Colors.white,
-                          child: const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.error, size: 48, color: Colors.grey),
-                                SizedBox(height: 8),
-                                Text('Failed to load image'),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+  Widget _buildVerifiedTab() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _adminService.getVerifiedDonors(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _loadDashboardData,
+                  child: const Text('Retry'),
                 ),
-              ),
-              Positioned(
-                top: 40,
-                right: 40,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
+              ],
+            ),
+          );
+        }
+
+        final verifiedDonors = snapshot.data ?? [];
+
+        if (verifiedDonors.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.verified_user, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text(
+                  'No verified donors yet',
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: verifiedDonors.length,
+          itemBuilder: (context, index) {
+            final donor = verifiedDonors[index];
+            return _buildVerifiedDonorCard(donor);
+          },
         );
       },
     );
   }
 
-  Widget _buildLogCard(Map<String, dynamic> log) {
+  Widget _buildVerifiedDonorCard(Map<String, dynamic> donor) {
+    final donorData = donor['donorData'] as Map<String, dynamic>;
+    final userData = donor['userData'] as Map<String, dynamic>;
+    
+    final name = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
+    final email = userData['email'] ?? '';
+    final phone = userData['phone'] ?? '';
+    final bloodType = donorData['bloodType'] ?? 'Unknown';
+    final verifiedAt = donor['verificationDate'] as Timestamp?;
+    
+    String verificationDate = 'Unknown';
+    if (verifiedAt != null) {
+      final date = verifiedAt.toDate();
+      verificationDate = '${date.day}/${date.month}/${date.year}';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.green,
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Blood Type: $bloodType',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'VERIFIED',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Details
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailItem(Icons.email, 'Email', email),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildDetailItem(Icons.phone, 'Phone', phone),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildDetailItem(Icons.verified, 'Verified On', verificationDate),
+                
+                // Status indicator
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green, width: 1),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Verified donor - eligible for blood donation',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogsTab() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _adminService.getVerificationLogs(limit: 100),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _loadDashboardData,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final logs = snapshot.data ?? [];
+
+        if (logs.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.history, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text(
+                  'No verification logs yet',
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: logs.length,
+          itemBuilder: (context, index) {
+            final log = logs[index];
+            return _buildVerificationLogCard(log);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildVerificationLogCard(Map<String, dynamic> log) {
     final action = log['action'] as String;
     final donorName = log['donorName'] as String;
     final adminName = log['adminName'] as String;
-    final timestamp = (log['timestamp'] as Timestamp).toDate();
+    final timestamp = log['timestamp'] as Timestamp;
+    final adminNotes = log['adminNotes'] as String?;
+    final rejectionReason = log['rejectionReason'] as String?;
     
-    final isVerified = action == 'verified';
-    final color = isVerified ? Colors.green : Colors.red;
-    final icon = isVerified ? Icons.check_circle : Icons.cancel;
+    final isApproval = action == 'verified';
+    final color = isApproval ? Colors.green : Colors.red;
+    final icon = isApproval ? Icons.check_circle : Icons.cancel;
+    
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    String timeAgo;
+    if (difference.inDays > 0) {
+      timeAgo = '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      timeAgo = '${difference.inHours} hours ago';
+    } else if (difference.inMinutes > 0) {
+      timeAgo = '${difference.inMinutes} minutes ago';
+    } else {
+      timeAgo = 'Just now';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -888,7 +1059,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$adminName ${isVerified ? 'verified' : 'rejected'} $donorName',
+                  isApproval ? 'Approved Verification' : 'Rejected Verification',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -897,12 +1068,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${timestamp.day}/${timestamp.month}/${timestamp.year} at ${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')}',
+                  'Donor: $donorName',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
                   ),
                 ),
+                Text(
+                  'Admin: $adminName',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  timeAgo,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                if (rejectionReason != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Reason: $rejectionReason',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                if (adminNotes != null && adminNotes.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Notes: $adminNotes',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -911,99 +1119,88 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
-  void _showVerificationDialog(String donorId, bool isVerifying) {
-    final TextEditingController notesController = TextEditingController();
-    final TextEditingController reasonController = TextEditingController();
+  // Action methods for donor applications
+  Future<void> _approveDonorApplication(String donorId, String donorName) async {
+    try {
+      await _adminService.verifyDonorApplication(donorId, 'Approved by admin');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$donorName has been approved as a verified donor'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      _loadDashboardData();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error approving application: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
-    showDialog(
+  Future<void> _rejectDonorApplication(String donorId, String donorName) async {
+    final reason = await _showRejectionDialog();
+    if (reason == null || reason.isEmpty) return;
+
+    try {
+      await _adminService.rejectDonorApplication(donorId, reason, 'Rejected by admin');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$donorName\'s application has been rejected'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      
+      _loadDashboardData();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error rejecting application: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _showRejectionDialog() async {
+    final controller = TextEditingController();
+    
+    return showDialog<String>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isVerifying ? 'Verify Donor' : 'Reject Application'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isVerifying) ...[
-                TextField(
-                  controller: reasonController,
-                  decoration: const InputDecoration(
-                    labelText: 'Rejection Reason',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-              ],
-              TextField(
-                controller: notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Admin Notes (Optional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Application'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Please provide a reason for rejection:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Enter rejection reason...',
+                border: OutlineInputBorder(),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                
-                String? error;
-                if (isVerifying) {
-                  error = await _adminService.verifyDonorApplication(
-                    donorId,
-                    notesController.text.trim(),
-                  );
-                } else {
-                  if (reasonController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please provide a rejection reason'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  error = await _adminService.rejectDonorApplication(
-                    donorId,
-                    reasonController.text.trim(),
-                    notesController.text.trim(),
-                  );
-                }
-
-                if (error != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(error),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(isVerifying 
-                          ? 'Donor verified successfully!' 
-                          : 'Application rejected successfully!'),
-                      backgroundColor: isVerifying ? Colors.green : Colors.orange,
-                    ),
-                  );
-                  _loadDashboardData(); // Refresh data
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isVerifying ? Colors.green : Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(isVerifying ? 'Verify' : 'Reject'),
             ),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Reject', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1062,203 +1259,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
-  Widget _buildAdminDrawer() {
-    return Drawer(
-      backgroundColor: Colors.white,
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Admin Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF6B6B), Color(0xFFFF5252)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Admin Panel',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Blood Donation Management',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Menu Items
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                children: [
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.dashboard,
-                    title: 'Dashboard Overview',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _tabController.animateTo(0);
-                    },
-                  ),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.pending_actions,
-                    title: 'Pending Applications',
-                    subtitle: '${_dashboardStats['pendingApplications'] ?? 0} pending',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _tabController.animateTo(1);
-                    },
-                  ),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.verified_user,
-                    title: 'Verified Donors',
-                    subtitle: '${_dashboardStats['verifiedDonors'] ?? 0} verified',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _tabController.animateTo(2);
-                    },
-                  ),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.bloodtype,
-                    title: 'Blood Requests',
-                    subtitle: '${_dashboardStats['totalBloodRequests'] ?? 0} requests',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showBloodRequests();
-                    },
-                  ),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.history,
-                    title: 'Verification Logs',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _tabController.animateTo(3);
-                    },
-                  ),
-                  const Divider(height: 32),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.analytics,
-                    title: 'Analytics',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showComingSoon('Analytics');
-                    },
-                  ),
-                  _buildAdminDrawerMenuItem(
-                    icon: Icons.settings,
-                    title: 'Admin Settings',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showComingSoon('Admin Settings');
-                    },
-                  ),
-                ],
-              ),
-            ),
-            
-            // Logout Button
-            Container(
-              margin: const EdgeInsets.all(16),
-              child: ListTile(
-                leading: const Icon(
-                  Icons.logout,
-                  color: Colors.red,
-                ),
-                title: const Text(
-                  'LOGOUT',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showLogoutDialog();
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminDrawerMenuItem({
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          color: Colors.red,
-          size: 20,
-        ),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: Colors.black,
-        ),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            )
-          : null,
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-    );
-  }
-
   void _showBloodRequests() {
     Navigator.push(
       context,
@@ -1268,10 +1268,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
-  void _showComingSoon(String feature) {
+  void _showRejectedApplications() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature coming soon!'),
+      const SnackBar(
+        content: Text('Rejected applications feature coming soon'),
         backgroundColor: Colors.blue,
       ),
     );
