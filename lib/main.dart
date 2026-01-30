@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:blood_donation_app/Screens/splash_screen.dart';
 import 'package:blood_donation_app/Screens/admin_login_screen.dart';
+import 'package:blood_donation_app/Screens/verification_application_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:blood_donation_app/services/notification_service.dart';
 import 'firebase_options.dart';
@@ -85,6 +86,7 @@ class MyApp extends StatelessWidget {
       home: const SplashScreen(),
       routes: {
         '/admin': (context) => const AdminLoginScreen(),
+        '/verification-application': (context) => const VerificationApplicationScreen(),
       },
     );
   }
