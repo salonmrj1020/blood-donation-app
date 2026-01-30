@@ -142,6 +142,7 @@ class AuthService {
   Future<String?> googleSignIn() async {
     try {
       print('Starting Google Sign-In...');
+      print('🔍 DEBUG: Current SHA-1 should be: 48:AD:4A:0B:16:3B:05:F1:E4:37:9A:E6:DD:C1:C0:FA:0C:B3:89:65');
       
       // Sign out first to ensure clean state
       await _googleSignIn.signOut();
@@ -211,7 +212,25 @@ class AuthService {
       return e.message ?? 'Google sign-in failed';
     } catch (e) {
       print('General Google Sign-In Error: $e');
-      return 'An error occurred during Google sign-in: ${e.toString()}';
+      
+      // Handle specific Google Sign-In errors more gracefully
+      final errorString = e.toString();
+      if (errorString.contains('ApiException: 10') || 
+          errorString.contains('sign_in_failed') ||
+          errorString.contains('DEVELOPER_ERROR')) {
+        print('🚨 SHA-1 FINGERPRINT MISMATCH DETECTED!');
+        print('📋 Current SHA-1: 48:AD:4A:0B:16:3B:05:F1:E4:37:9A:E6:DD:C1:C0:FA:0C:B3:89:65');
+        print('📋 Expected in Firebase: f40e1efa9bd67f32213713fde83a15c772689afc');
+        print('🔧 Please update Firebase Console with the correct SHA-1 fingerprint');
+        return 'Configuration Error: Google Sign-In requires SHA-1 fingerprint update in Firebase Console. Please contact developer to fix this issue.';
+      } else if (errorString.contains('network_error') || 
+                 errorString.contains('NETWORK_ERROR')) {
+        return 'Network error. Please check your internet connection and try again.';
+      } else if (errorString.contains('sign_in_cancelled')) {
+        return 'Google sign-in was cancelled';
+      }
+      
+      return 'Google Sign-In is currently unavailable. Please use email/password login.';
     }
   }
 
@@ -293,39 +312,52 @@ class AuthService {
     }
   }
 
+  // Get current user data as stream for real-time updates
+  Stream<Map<String, dynamic>?> getCurrentUserDataStream() {
+    final user = currentUser;
+    if (user == null) {
+      return Stream.value(null);
+    }
+
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .map((doc) => doc.exists ? doc.data() : null);
+  }
+
   // Update user profile
   Future<String?> updateUserProfile({
-    required String firstName,
-    required String lastName,
-    required String phone,
+    String? firstName,
+    String? lastName,
+    String? phone,
     DateTime? dateOfBirth,
     String? gender,
     String? country,
     String? city,
+    String? bloodType,
+    double? weight,
+    String? occupation,
   }) async {
     try {
       final user = currentUser;
       if (user == null) return 'User not authenticated';
 
       final updateData = <String, dynamic>{
-        'firstName': firstName,
-        'lastName': lastName,
-        'phone': phone,
         'updatedAt': Timestamp.now(),
       };
 
-      if (dateOfBirth != null) {
-        updateData['dateOfBirth'] = Timestamp.fromDate(dateOfBirth);
-      }
-      if (gender != null) {
-        updateData['gender'] = gender;
-      }
-      if (country != null) {
-        updateData['country'] = country;
-      }
-      if (city != null) {
-        updateData['city'] = city;
-      }
+      // Only update fields that are provided
+      if (firstName != null) updateData['firstName'] = firstName;
+      if (lastName != null) updateData['lastName'] = lastName;
+      if (phone != null) updateData['phone'] = phone;
+      if (dateOfBirth != null) updateData['dateOfBirth'] = Timestamp.fromDate(dateOfBirth);
+      if (gender != null) updateData['gender'] = gender;
+      if (country != null) updateData['country'] = country;
+      if (city != null) updateData['city'] = city;
+      if (bloodType != null) updateData['bloodType'] = bloodType;
+      if (weight != null) updateData['weight'] = weight;
+      if (occupation != null) updateData['occupation'] = occupation;
 
       await _firestore
           .collection('users')
