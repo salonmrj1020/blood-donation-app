@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "232041177198-625lb9j2ca93d2u4671tra7fua3kliq1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.blood_donation_app",
+            "certificate_hash": "48ad4a0b163b05f1e4379ae6ddc1c0fa0cb38965"
+          }
+        },
+        {
           "client_id": "232041177198-uds8re9uv90qqaf4tpb7bfggb4fre6iv.apps.googleusercontent.com",
           "client_type": 3
         }
