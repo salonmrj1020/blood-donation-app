@@ -4,6 +4,7 @@ import 'package:blood_donation_app/Screens/admin_login_screen.dart';
 import 'package:blood_donation_app/Screens/verification_application_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:blood_donation_app/services/notification_service.dart';
+import 'package:blood_donation_app/services/blood_request_service.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -15,9 +16,19 @@ void main() async {
   // Initialize notification service for popup notifications
   try {
     await NotificationService().initialize();
-    print('✅ Notification service initialized successfully');
+    print('Notification service initialized successfully');
   } catch (e) {
-    print('❌ Error initializing notification service: $e');
+    print(' Error initializing notification service: $e');
+  }
+
+  // Start auto-expire check for blood requests
+  try {
+    // deleteExpired: true means expired requests will be completely deleted
+    // Set to false if you want to keep them as "expired" status for records
+    await BloodRequestService().startAutoExpireCheck(deleteExpired: true);
+    print('Blood request auto-expire check started (delete mode: ON)');
+  } catch (e) {
+    print(' Error starting auto-expire check: $e');
   }
   
   runApp(const MyApp());
